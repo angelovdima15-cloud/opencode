@@ -1,0 +1,109 @@
+[
+  {
+    "id": 1,
+    "name": "Good Game",
+    "address": "ул. Камали Дюсембекова, 83/2, Караганда",
+    "phone": "+77053132344",
+    "lat": 49.79338,
+    "lng": 73.13962,
+    "schedule": "24/7",
+    "price_per_hour": 500,
+    "total_pcs": 40,
+    "description": "Популярный клуб с мощными ПК и уютной атмосферой",
+    "amenities": ["Кондиционер", "Санузел", "Бар", "VIP-зона"],
+    "zones": [
+      { "name": "Общий зал", "pcs_count": 30, "price_per_hour": 500 },
+      { "name": "VIP", "pcs_count": 10, "price_per_hour": 800 }
+    ],
+    "has_senet": true,
+    "senet_club_id": 1
+  },
+  {
+    "id": 2,
+    "name": "Arena",
+    "address": "пр. Нурсултан Назарбаев, 33/2, Караганда",
+    "phone": "+77011223344",
+    "lat": 49.81590,
+    "lng": 73.10160,
+    "schedule": "24/7",
+    "price_per_hour": 600,
+    "total_pcs": 30,
+    "description": "Игровой клуб с турнирной зоной и мощными ПК",
+    "amenities": ["Кондиционер", "Бар", "Турнирная зона"],
+    "zones": [
+      { "name": "Общий зал", "pcs_count": 20, "price_per_hour": 600 },
+      { "name": "VIP", "pcs_count": 10, "price_per_hour": 1000 }
+    ],
+    "has_senet": true,
+    "senet_club_id": 2
+  },
+  {
+    "id": 3,
+    "name": "Colizeum",
+    "address": "ул. Космонавтов, 149, Караганда",
+    "phone": "+77020431503",
+    "lat": 49.80106,
+    "lng": 73.12195,
+    "schedule": "24/7",
+    "price_per_hour": 550,
+    "total_pcs": 35,
+    "description": "Современный клуб с зоной PS5 и VR",
+    "amenities": ["PS5", "VR", "Бар", "Кондиционер"],
+    "zones": [
+      { "name": "Общий зал", "pcs_count": 25, "price_per_hour": 550 },
+      { "name": "VIP", "pcs_count": 10, "price_per_hour": 900 }
+    ],
+    "has_senet": false
+  },
+  {
+    "id": 4,
+    "name": "Bunker",
+    "address": "ул. Ермекова, 52/2, Караганда",
+    "phone": "+77015556677",
+    "lat": 49.79598,
+    "lng": 73.09421,
+    "schedule": "24/7",
+    "price_per_hour": 450,
+    "total_pcs": 25,
+    "description": "Небольшой клуб с демократичными ценами",
+    "amenities": ["Санузел", "Бар"],
+    "zones": [
+      { "name": "Общий зал", "pcs_count": 25, "price_per_hour": 450 }
+    ],
+    "has_senet": false
+  },
+  {
+    "id": 5,
+    "name": "Global Game",
+    "address": "ул. Ерубаева, 48, Караганда",
+    "phone": "+77018889900",
+    "lat": 49.80673,
+    "lng": 73.09252,
+    "schedule": "24/7",
+    "price_per_hour": 500,
+    "total_pcs": 35,
+    "description": "Популярная сеть компьютерных клубов",
+    "amenities": ["Кондиционер", "Бар", "Санузел"],
+    "zones": [
+      { "name": "Общий зал", "pcs_count": 35, "price_per_hour": 500 }
+    ],
+    "has_senet": false
+  },
+  {
+    "id": 6,
+    "name": "Sky Tower",
+    "address": "пр. Бухар Жырау, 65, Караганда",
+    "phone": "+77012223344",
+    "lat": 49.79856,
+    "lng": 73.08930,
+    "schedule": "12:00–02:00",
+    "price_per_hour": 400,
+    "total_pcs": 20,
+    "description": "Клуб в центре города с низкими ценами",
+    "amenities": ["Санузел"],
+    "zones": [
+      { "name": "Общий зал", "pcs_count": 20, "price_per_hour": 400 }
+    ],
+    "has_senet": false
+  }
+]
