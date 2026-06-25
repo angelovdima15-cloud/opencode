@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb } from '../db/database';
 import { hashPassword, comparePassword, generateToken, sendVerificationCode, verifyPhoneCode } from '../services/auth.service';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { config } from '../config';
 
 export const authRoutes = Router();
 
@@ -92,10 +93,20 @@ authRoutes.post('/send-code', (req: Request, res: Response) => {
     }
 
     const code = sendVerificationCode(normalizedPhone);
-    console.log(`[SMS] Код для ${normalizedPhone}: ${code}`);
+    // TODO: интеграция с реальным SMS-провайдером (Mobizon/SMSC и т.п.).
+    // В dev-режиме код выводим в лог; в проде он НЕ возвращается клиенту.
+    if (config.app.env === 'development') {
+      console.log(`[SMS] Код для ${normalizedPhone}: ${code}`);
+    }
 
-    res.json({ success: true, message: 'Код отправлен (заглушка: 1234)' });
+    const payload: any = { success: true, message: 'Код отправлен' };
+    if (config.app.env === 'development') payload.dev_code = code;
+    res.json(payload);
   } catch (err: any) {
+    if (err?.code === 'rate_limited') {
+      res.status(429).json({ error: 'rate_limited', message: err.message });
+      return;
+    }
     console.error('[Auth] Send-code error:', err);
     res.status(500).json({ error: 'internal_error', message: 'Не удалось отправить код' });
   }
@@ -125,6 +136,10 @@ authRoutes.post('/verify-code', (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Телефон подтверждён' });
   } catch (err: any) {
+    if (err?.code === 'rate_limited') {
+      res.status(429).json({ error: 'rate_limited', message: err.message });
+      return;
+    }
     console.error('[Auth] Verify-code error:', err);
     res.status(500).json({ error: 'internal_error', message: 'Не удалось проверить код' });
   }
@@ -179,6 +194,10 @@ authRoutes.post('/login-phone', (req: Request, res: Response) => {
 
     res.json({ token, user });
   } catch (err: any) {
+    if (err?.code === 'rate_limited') {
+      res.status(429).json({ error: 'rate_limited', message: err.message });
+      return;
+    }
     console.error('[Auth] Login-phone error:', err);
     res.status(500).json({ error: 'internal_error', message: 'Не удалось войти по телефону' });
   }
