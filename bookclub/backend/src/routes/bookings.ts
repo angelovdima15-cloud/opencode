@@ -2,13 +2,33 @@ import { Router, Request, Response } from 'express';
 import { getDb } from '../db/database';
 import { nanoid } from 'nanoid';
 import { config } from '../config';
-import { optionalAuth } from '../middleware/auth.middleware';
+import { authMiddleware, optionalAuth } from '../middleware/auth.middleware';
 import type { CreateBookingRequest, BookingResponse } from '../schemas/booking';
 
 export const bookingRoutes = Router();
 
 function generateBookingId(): string {
   return 'bk_' + nanoid(10);
+}
+
+/** Нормализация телефона для сравнения (только + и цифры). */
+function normalizePhone(phone: string | null | undefined): string {
+  return (phone || '').replace(/[^+\d]/g, '');
+}
+
+/**
+ * Проверяет, принадлежит ли бронь пользователю: по user_id, либо по совпадению
+ * верифицированного телефона пользователя с телефоном гостевой брони.
+ */
+function ownsBooking(
+  db: ReturnType<typeof getDb>,
+  booking: { user_id: number | null; user_phone: string | null },
+  userId: number,
+): boolean {
+  if (booking.user_id != null && booking.user_id === userId) return true;
+  const u = db.prepare('SELECT phone FROM users WHERE id = ?').get(userId) as { phone?: string } | undefined;
+  const userPhone = normalizePhone(u?.phone);
+  return !!userPhone && normalizePhone(booking.user_phone) === userPhone;
 }
 
 /**
@@ -24,7 +44,7 @@ function isOverlapping(
   let sql = `
     SELECT COUNT(*) as cnt FROM bookings
     WHERE workstation_id = ?
-      AND status IN ('confirmed', 'pending')
+      AND status IN ('confirmed', 'pending', 'arrived')
       AND start_time < ?
       AND end_time > ?
   `;
@@ -70,9 +90,13 @@ function validateTimeSlot(startISO: string, endISO: string): { valid: boolean; e
     return { valid: false, error: 'Время окончания должно быть позже времени начала' };
   }
 
-  // Нельзя бронировать в прошлом
+  // Нельзя бронировать в прошлом — ни начало, ни конец слота
   const now = Date.now();
-  if (end.getTime() < now - 60000) { // 1 минута запаса
+  const GRACE_MS = 60000; // 1 минута запаса на рассинхрон часов
+  if (start.getTime() < now - GRACE_MS) {
+    return { valid: false, error: 'Нельзя бронировать на прошедшее время' };
+  }
+  if (end.getTime() < now - GRACE_MS) {
     return { valid: false, error: 'Нельзя бронировать на прошедшее время' };
   }
 
@@ -142,15 +166,6 @@ bookingRoutes.post('/', optionalAuth, (req: Request, res: Response) => {
       return;
     }
 
-    // Проверка пересечения с существующими бронями
-    if (isOverlapping(db, workstation_id, startISO, endISO)) {
-      res.status(409).json({
-        error: 'time_conflict',
-        message: 'Этот ПК уже занят на выбранное время. Выберите другой слот или другой ПК.',
-      });
-      return;
-    }
-
     // Расчёт цены
     let pricePerHour = club.price_per_hour;
     const wsZone = db.prepare('SELECT zone_id FROM workstations WHERE id = ?').get(workstation_id) as any;
@@ -170,30 +185,56 @@ bookingRoutes.post('/', optionalAuth, (req: Request, res: Response) => {
     const now = new Date().toISOString();
     const userId = req.user?.userId || null;
 
-    // Если пользователь авторизован — списываем с баланса
-    if (userId) {
-      const userBalance = db.prepare('SELECT balance FROM users WHERE id = ?').get(userId) as any;
-      if (!userBalance || userBalance.balance < totalPrice) {
-        res.status(402).json({
-          error: 'insufficient_balance',
-          message: 'Недостаточно средств на балансе. Пополните кошелёк.',
+    // Атомарно: повторная проверка пересечения, списание баланса и вставка брони.
+    // better-sqlite3 синхронен, поэтому транзакция полностью сериализует операцию
+    // и исключает гонку двойного бронирования и перерасход баланса при
+    // одновременных запросах. Ошибки бросаем с httpCode для маппинга в ответ.
+    const runBooking = db.transaction(() => {
+      // Повторная проверка ВНУТРИ транзакции — ключ к защите от гонки
+      if (isOverlapping(db, workstation_id, startISO, endISO)) {
+        throw Object.assign(new Error('time_conflict'), {
+          httpCode: 409,
+          errCode: 'time_conflict',
+          msg: 'Этот ПК уже занят на выбранное время. Выберите другой слот или другой ПК.',
         });
+      }
+
+      if (userId) {
+        const userBalance = db.prepare('SELECT balance FROM users WHERE id = ?').get(userId) as any;
+        if (!userBalance || userBalance.balance < totalPrice) {
+          throw Object.assign(new Error('insufficient_balance'), {
+            httpCode: 402,
+            errCode: 'insufficient_balance',
+            msg: 'Недостаточно средств на балансе. Пополните кошелёк.',
+          });
+        }
+        db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(totalPrice, userId);
+        db.prepare(`
+          INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, description, booking_id)
+          VALUES (?, 'payment', ?, ?, ?, ?, ?)
+        `).run(userId, -totalPrice, userBalance.balance, userBalance.balance - totalPrice, `Оплата брони #${bookingId}`, bookingId);
+      }
+
+      db.prepare(`
+        INSERT INTO bookings (id, club_id, workstation_id, user_id, user_phone, user_name, start_time, end_time, duration_hours, total_price, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?)
+      `).run(bookingId, club_id, workstation_id, userId, phoneClean, user_name || null, startISO, endISO, durationHours, totalPrice, now, now);
+    });
+
+    try {
+      runBooking();
+    } catch (txErr: any) {
+      if (txErr?.httpCode) {
+        res.status(txErr.httpCode).json({ error: txErr.errCode, message: txErr.msg });
         return;
       }
-      db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(totalPrice, userId);
-      db.prepare(`
-        INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, description, booking_id)
-        VALUES (?, 'payment', ?, ?, ?, ?, ?)
-      `).run(userId, -totalPrice, userBalance.balance, userBalance.balance - totalPrice, `Оплата брони #${bookingId}`, bookingId);
+      throw txErr;
     }
 
-    db.prepare(`
-      INSERT INTO bookings (id, club_id, workstation_id, user_id, user_phone, user_name, start_time, end_time, duration_hours, total_price, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?)
-    `).run(bookingId, club_id, workstation_id, userId, phoneClean, user_name || null, startISO, endISO, durationHours, totalPrice, now, now);
-
-    // Отмечаем ПК как занятый на этот слот
-    db.prepare('UPDATE workstations SET status = ?, booked_until = ? WHERE id = ?').run('booked', endISO, workstation_id);
+    // ПРИМЕЧАНИЕ: статус ПК здесь НЕ меняется. Доступность вычисляется по
+    // активным броням на текущий момент (см. services/availability.ts),
+    // поэтому будущая бронь не делает ПК «занятым» прямо сейчас, и несколько
+    // будущих броней не перетирают друг друга.
 
     // Фоновое уведомление клубу (не критично, бронь уже подтверждена)
     try {
@@ -267,7 +308,7 @@ bookingRoutes.get('/', optionalAuth, (req: Request, res: Response) => {
 });
 
 // GET /bookings/:id — статус брони
-bookingRoutes.get('/:id', (req: Request, res: Response) => {
+bookingRoutes.get('/:id', authMiddleware, (req: Request, res: Response) => {
   try {
     const db = getDb();
     const booking = db.prepare(`
@@ -280,6 +321,13 @@ bookingRoutes.get('/:id', (req: Request, res: Response) => {
 
     if (!booking) {
       res.status(404).json({ error: 'not_found', message: 'Бронь не найдена' });
+      return;
+    }
+
+    // Проверка владельца: бронь принадлежит пользователю по user_id
+    // либо по совпадению верифицированного телефона (гостевые брони)
+    if (!ownsBooking(db, booking, req.user!.userId)) {
+      res.status(403).json({ error: 'forbidden', message: 'Нет доступа к этой брони' });
       return;
     }
 
@@ -302,7 +350,7 @@ bookingRoutes.get('/:id', (req: Request, res: Response) => {
 });
 
 // POST /bookings/:id/cancel — отмена
-bookingRoutes.post('/:id/cancel', (req: Request, res: Response) => {
+bookingRoutes.post('/:id/cancel', authMiddleware, (req: Request, res: Response) => {
   try {
     const db = getDb();
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(req.params.id) as any;
@@ -312,32 +360,41 @@ bookingRoutes.post('/:id/cancel', (req: Request, res: Response) => {
       return;
     }
 
+    // Проверка владельца — отменить можно только свою бронь
+    if (!ownsBooking(db, booking, req.user!.userId)) {
+      res.status(403).json({ error: 'forbidden', message: 'Нет доступа к этой брони' });
+      return;
+    }
+
     if (booking.status === 'cancelled') {
       res.status(400).json({ error: 'already_cancelled', message: 'Бронь уже отменена' });
       return;
     }
 
     const now = new Date().toISOString();
+    const reason = req.body?.reason || 'Отменено пользователем';
 
-    // Возвращаем деньги на баланс, если оплачивал авторизованный пользователь
-    if (booking.user_id && booking.status === 'confirmed' && booking.total_price > 0) {
-      const db2 = getDb();
-      const userBal = db2.prepare('SELECT balance FROM users WHERE id = ?').get(booking.user_id) as any;
-      if (userBal) {
-        db2.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(booking.total_price, booking.user_id);
-        db2.prepare(
-          `INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, description, booking_id)
-           VALUES (?, 'refund', ?, ?, ?, ?, ?)`
-        ).run(booking.user_id, booking.total_price, userBal.balance, userBal.balance + booking.total_price, `Возврат за отмену брони #${booking.id}`, booking.id);
+    // Атомарно: возврат средств (если оплачивал авторизованный пользователь) +
+    // смена статуса брони. Статус ПК НЕ трогаем — доступность вычисляется по
+    // активным броням, поэтому отмена одной брони не «освобождает» ПК,
+    // на котором есть другие активные/будущие брони.
+    const runCancel = db.transaction(() => {
+      if (booking.user_id && booking.status === 'confirmed' && booking.total_price > 0) {
+        const userBal = db.prepare('SELECT balance FROM users WHERE id = ?').get(booking.user_id) as any;
+        if (userBal) {
+          db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(booking.total_price, booking.user_id);
+          db.prepare(
+            `INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, description, booking_id)
+             VALUES (?, 'refund', ?, ?, ?, ?, ?)`
+          ).run(booking.user_id, booking.total_price, userBal.balance, userBal.balance + booking.total_price, `Возврат за отмену брони #${booking.id}`, booking.id);
+        }
       }
-    }
 
-    db.prepare('UPDATE bookings SET status = ?, updated_at = ?, cancel_reason = ? WHERE id = ?')
-      .run('cancelled', now, req.body?.reason || 'Отменено пользователем', req.params.id);
+      db.prepare('UPDATE bookings SET status = ?, updated_at = ?, cancel_reason = ? WHERE id = ?')
+        .run('cancelled', now, reason, req.params.id);
+    });
 
-    // Возвращаем ПК в свободные
-    db.prepare('UPDATE workstations SET status = ?, booked_until = NULL WHERE id = ?')
-      .run('free', booking.workstation_id);
+    runCancel();
 
     res.json({ booking_id: booking.id, status: 'cancelled' });
   } catch (err) {

@@ -4,6 +4,7 @@ import { SenetClient } from '../services/senet.client';
 import { config } from '../config';
 import { haversineKm } from '../services/distance';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { getActiveBookedWorkstationIds, effectiveStatus } from '../services/availability';
 
 export const clubRoutes = Router();
 
@@ -173,11 +174,13 @@ clubRoutes.get('/:id', async (req: Request, res: Response) => {
 
     // Если SENET не дал данных — берём из БД
     if (workstations.length === 0) {
+      const bookedSet = getActiveBookedWorkstationIds(db, clubId);
       const dbWs = db.prepare('SELECT * FROM workstations WHERE club_id = ?').all(clubId) as any[];
       workstations = dbWs.map((w) => ({
         id: w.id,
         name: w.name,
-        status: w.status,
+        // Доступность вычисляется по активным броням на текущий момент
+        status: effectiveStatus(w.status, w.id, bookedSet),
         zone: resolveZoneNameByWs(w.zone_id, zones),
         specs: { cpu: w.cpu, gpu: w.gpu, ram: w.ram, monitor: w.monitor },
         position: { x: w.position_x || 50, y: w.position_y || 50 },
