@@ -1,4 +1,13 @@
 services:
+  mock-senet:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./mock-senet:/app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "9000:9000"
+
   backend:
     build:
       context: ./backend
@@ -7,12 +16,33 @@ services:
       - "8000:8000"
     env_file:
       - .env.example
+    environment:
+      # В сети Docker сервисы доступны по имени, а не по localhost
+      - SENET_MOCK_BASE_URL=http://mock-senet:9000
     volumes:
       - ./backend/src:/app/src
       - ./backend/data:/app/data
     command: npm run dev
+    depends_on:
+      - mock-senet
 
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    environment:
+      - API_PROXY=http://backend:8000
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host"
+    depends_on:
+      - backend
+
+  # Бот опционален: запускается только при наличии токена командой
+  #   docker compose --profile bot up
   telegram-bot:
+    profiles: ["bot"]
     build:
       context: ./telegram-bot
       dockerfile: Dockerfile
@@ -21,12 +51,3 @@ services:
     depends_on:
       - backend
     command: npm run dev
-
-  frontend:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    ports:
-      - "5173:5173"
-    command: sh -c "npm install && npm run dev"

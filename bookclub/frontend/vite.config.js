@@ -5,7 +5,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // В Docker задаётся API_PROXY=http://backend:8000, локально — localhost
+        target: process.env.API_PROXY || 'http://localhost:8000',
         changeOrigin: true,
       },
     },

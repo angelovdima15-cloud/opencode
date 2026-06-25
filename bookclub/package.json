@@ -1,0 +1,14 @@
+{
+  "name": "bookclub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BookClub — запуск всей беты (mock-SENET + API + фронт) одной командой",
+  "scripts": {
+    "setup": "npm --prefix backend install && npm --prefix frontend install && npm --prefix mock-senet install && node scripts/ensure-env.js",
+    "dev": "concurrently -k -n senet,api,web -c magenta,cyan,green \"npm --prefix mock-senet run dev\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "beta": "npm run setup && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
