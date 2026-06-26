@@ -224,9 +224,47 @@ authRoutes.put('/me', authMiddleware, (req: Request, res: Response) => {
   try {
     const { name, phone } = req.body;
     const db = getDb();
-    db.prepare("UPDATE users SET name = COALESCE(?, name), phone = COALESCE(?, phone), updated_at = datetime('now') WHERE id = ?")
-      .run(name || null, phone || null, req.user!.userId);
-    res.json({ user: getUser(db, req.user!.userId) });
+    const userId = req.user!.userId;
+
+    const currentUser = db.prepare('SELECT phone FROM users WHERE id = ?').get(userId) as
+      | { phone?: string }
+      | undefined;
+    if (!currentUser) {
+      res.status(404).json({ error: 'not_found', message: 'Пользователь не найден' });
+      return;
+    }
+
+    let updatedPhone = currentUser.phone ?? null;
+    let resetVerification = false;
+
+    // Смена телефона: валидируем формат, проверяем уникальность и СБРАСЫВАЕМ
+    // phone_verified, чтобы новый номер требовал повторного подтверждения по SMS.
+    if (typeof phone === 'string' && phone.trim() !== '') {
+      const normalizedNewPhone = phone.replace(/[^+\d]/g, '');
+      if (normalizedNewPhone.length < 8) {
+        res.status(400).json({ error: 'validation_error', message: 'Некорректный номер телефона' });
+        return;
+      }
+      if (normalizedNewPhone !== (currentUser.phone || '')) {
+        const taken = db.prepare('SELECT id FROM users WHERE phone = ? AND id != ?').get(normalizedNewPhone, userId);
+        if (taken) {
+          res.status(409).json({ error: 'phone_in_use', message: 'Этот номер телефона уже используется другим аккаунтом' });
+          return;
+        }
+        updatedPhone = normalizedNewPhone;
+        resetVerification = true;
+      }
+    }
+
+    if (resetVerification) {
+      db.prepare("UPDATE users SET name = COALESCE(?, name), phone = ?, phone_verified = 0, updated_at = datetime('now') WHERE id = ?")
+        .run(name || null, updatedPhone, userId);
+    } else {
+      db.prepare("UPDATE users SET name = COALESCE(?, name), updated_at = datetime('now') WHERE id = ?")
+        .run(name || null, userId);
+    }
+
+    res.json({ user: getUser(db, userId) });
   } catch (err: any) {
     console.error('[Auth] Update error:', err);
     res.status(500).json({ error: 'internal_error', message: 'Не удалось обновить профиль' });

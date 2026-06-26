@@ -107,10 +107,26 @@ clubRoutes.get('/', async (req: Request, res: Response) => {
     }
 
     // Обогащаем статусами из SENET/кеша
+    // Загружаем зоны для ВСЕХ клубов одним запросом (устраняем N+1).
+    const clubIds = clubs.map((c: any) => c.id);
+    const zonesByClub: Record<number, any[]> = {};
+    if (clubIds.length > 0) {
+      const placeholders = clubIds.map(() => '?').join(',');
+      const allZones = db.prepare(
+        `SELECT club_id, name, pcs_count, price_per_hour FROM zones WHERE club_id IN (${placeholders})`
+      ).all(...clubIds) as any[];
+      for (const z of allZones) {
+        (zonesByClub[z.club_id] ||= []).push({
+          name: z.name,
+          pcs_count: z.pcs_count,
+          price_per_hour: z.price_per_hour,
+        });
+      }
+    }
+
     const enriched = clubs.map((c: any) => {
       const enrichedClub = enrichFromCache(c, c.id);
-      const zones = db.prepare('SELECT name, pcs_count, price_per_hour FROM zones WHERE club_id = ?').all(c.id) as any[];
-      return { ...enrichedClub, zones };
+      return { ...enrichedClub, zones: zonesByClub[c.id] || [] };
     });
 
     res.json({ clubs: enriched });

@@ -26,8 +26,14 @@ function ownsBooking(
   userId: number,
 ): boolean {
   if (booking.user_id != null && booking.user_id === userId) return true;
-  const u = db.prepare('SELECT phone FROM users WHERE id = ?').get(userId) as { phone?: string } | undefined;
-  const userPhone = normalizePhone(u?.phone);
+  // Сопоставление по телефону разрешено ТОЛЬКО для подтверждённого (phone_verified=1)
+  // телефона пользователя. Иначе достаточно сменить телефон в профиле на чужой,
+  // чтобы получить доступ к гостевым броням жертвы (IDOR).
+  const u = db.prepare('SELECT phone, phone_verified FROM users WHERE id = ?').get(userId) as
+    | { phone?: string; phone_verified?: number }
+    | undefined;
+  if (!u || u.phone_verified !== 1) return false;
+  const userPhone = normalizePhone(u.phone);
   return !!userPhone && normalizePhone(booking.user_phone) === userPhone;
 }
 
@@ -133,7 +139,11 @@ bookingRoutes.post('/', optionalAuth, (req: Request, res: Response) => {
       return;
     }
 
-    // Валидация телефона
+    // Валидация телефона (защита от не-строковых значений в теле запроса)
+    if (typeof user_phone !== 'string') {
+      res.status(400).json({ error: 'validation_error', message: 'Неверный формат номера телефона' });
+      return;
+    }
     const phoneClean = user_phone.replace(/[\s\-\(\)]/g, '');
     if (phoneClean.length < 10) {
       res.status(400).json({
@@ -266,39 +276,38 @@ bookingRoutes.post('/', optionalAuth, (req: Request, res: Response) => {
 });
 
 // GET /bookings/ — список броней текущего пользователя
-bookingRoutes.get('/', optionalAuth, (req: Request, res: Response) => {
+bookingRoutes.get('/', authMiddleware, (req: Request, res: Response) => {
   try {
     const db = getDb();
-    const userId = req.user?.userId;
-    const phone = req.query.phone as string;
+    const userId = req.user!.userId;
 
-    if (!userId && !phone) {
-      res.status(401).json({ error: 'unauthorized', message: 'Требуется авторизация или номер телефона' });
+    // Получаем верифицированный телефон текущего пользователя.
+    // Список броней ВСЕГДА ограничен текущим пользователем: по user_id ИЛИ по
+    // его собственному ПОДТВЕРЖДЁННОМУ телефону (гостевые брони, созданные до
+    // регистрации). Запрос по произвольному ?phone больше НЕ поддерживается —
+    // это исключает утечку чужих броней и PII.
+    const user = db.prepare('SELECT phone, phone_verified FROM users WHERE id = ?').get(userId) as
+      | { phone?: string; phone_verified?: number }
+      | undefined;
+
+    if (!user) {
+      res.status(404).json({ error: 'not_found', message: 'Пользователь не найден' });
       return;
     }
 
-    let bookings: any[];
-    if (userId) {
-      bookings = db.prepare(`
-        SELECT b.*, c.name as club_name, w.name as workstation_name
-        FROM bookings b
-        JOIN clubs c ON c.id = b.club_id
-        JOIN workstations w ON w.id = b.workstation_id
-        WHERE b.user_id = ?
-        ORDER BY b.created_at DESC
-        LIMIT 50
-      `).all(userId);
-    } else {
-      bookings = db.prepare(`
-        SELECT b.*, c.name as club_name, w.name as workstation_name
-        FROM bookings b
-        JOIN clubs c ON c.id = b.club_id
-        JOIN workstations w ON w.id = b.workstation_id
-        WHERE b.user_phone = ?
-        ORDER BY b.created_at DESC
-        LIMIT 50
-      `).all(phone);
-    }
+    // Телефон используется как сопоставитель только если он подтверждён.
+    const verifiedPhone = user.phone_verified === 1 ? normalizePhone(user.phone) : '';
+
+    const bookings = db.prepare(`
+      SELECT b.*, c.name as club_name, w.name as workstation_name
+      FROM bookings b
+      JOIN clubs c ON c.id = b.club_id
+      JOIN workstations w ON w.id = b.workstation_id
+      WHERE b.user_id = ?
+         OR (b.user_id IS NULL AND ? != '' AND b.user_phone = ?)
+      ORDER BY b.created_at DESC
+      LIMIT 50
+    `).all(userId, verifiedPhone, verifiedPhone);
 
     res.json({ bookings });
   } catch (err) {
