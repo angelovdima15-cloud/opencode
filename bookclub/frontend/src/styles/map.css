@@ -1,23 +1,63 @@
 #map-container {
-  height: 300px;
+  height: 320px;
   border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid var(--border);
   margin-bottom: 16px;
+  box-shadow: var(--shadow);
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+#map-container:hover {
+  border-color: var(--border-strong);
 }
 
 .leaflet-container {
-  background: #1e293b;
+  background: var(--bg-elev);
+  font-family: 'Inter', sans-serif;
+}
+
+/* Tone the base tiles toward the dark gaming palette */
+.leaflet-tile-pane {
+  filter: brightness(0.85) saturate(1.05) contrast(1.05);
 }
 
 .leaflet-popup-content-wrapper {
-  background: var(--bg-card);
+  background: var(--bg-card-solid);
   color: var(--text);
-  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lift), var(--glow-soft);
 }
 
 .leaflet-popup-tip {
-  background: var(--bg-card);
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-strong);
+}
+
+.leaflet-popup-content a {
+  color: var(--accent-bright);
+}
+
+.leaflet-control-zoom a {
+  background: var(--bg-card-solid) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  transition: background 0.2s, color 0.2s;
+}
+
+.leaflet-control-zoom a:hover {
+  background: var(--bg-hover) !important;
+  color: var(--accent-bright) !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(10, 10, 15, 0.7) !important;
+  color: var(--text-muted) !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--accent-bright) !important;
 }
 
 .custom-marker {
@@ -33,7 +73,7 @@
 .seatmap-svg {
   width: 100%;
   height: auto;
-  background: #1e293b;
+  background: var(--bg-elev);
   border-radius: var(--radius);
   border: 1px solid var(--border);
   padding: 16px;
@@ -41,7 +81,7 @@
 
 @media (max-width: 480px) {
   #app { padding: 8px; }
-  .header { padding: 16px 0; }
+  .header { padding: 12px 0; }
   .header__title { font-size: 22px; }
-  #map-container { height: 200px; }
+  #map-container { height: 240px; }
 }
