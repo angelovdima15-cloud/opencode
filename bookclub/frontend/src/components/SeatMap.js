@@ -26,9 +26,9 @@ export class SeatMap {
       rect.setAttribute('height', '20');
       rect.setAttribute('rx', '4');
 
-      const statusClass = ws.status === 'free' ? '#4ade80' : ws.status === 'busy' ? '#f87171' : '#9ca3af';
-      rect.setAttribute('fill', statusClass);
-      rect.setAttribute('stroke', '#374151');
+      const statusColor = ws.status === 'free' ? '#00E5A0' : ws.status === 'busy' ? '#FF5568' : '#565C66';
+      rect.setAttribute('fill', statusColor);
+      rect.setAttribute('stroke', '#262B33');
       rect.setAttribute('stroke-width', '1');
 
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -46,11 +46,10 @@ export class SeatMap {
 
       if (ws.status === 'free') {
         g.addEventListener('click', () => this.onSeatClick?.(ws));
-        g.addEventListener('mouseenter', () => rect.setAttribute('stroke', '#60a5fa'));
-        g.addEventListener('mouseleave', () => rect.setAttribute('stroke', '#374151'));
+        g.addEventListener('mouseenter', () => rect.setAttribute('stroke', '#5B5BFF'));
+        g.addEventListener('mouseleave', () => rect.setAttribute('stroke', '#262B33'));
       }
 
-      // Tooltip on hover
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
       title.textContent = `${ws.name} — ${ws.zone}\n${ws.specs?.cpu || ''}\n${ws.specs?.gpu || ''}`;
       g.appendChild(title);

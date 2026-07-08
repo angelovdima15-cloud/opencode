@@ -1,5 +1,5 @@
-const TOKEN_KEY = 'bookclub_token';
-const USER_KEY = 'bookclub_user';
+const TOKEN_KEY = 'cofou_token';
+const USER_KEY = 'cofou_user';
 
 let currentUser = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
 let currentToken = localStorage.getItem(TOKEN_KEY);

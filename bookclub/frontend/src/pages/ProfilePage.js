@@ -20,8 +20,9 @@ function formatAmount(amount) {
 }
 
 function statusClass(status) {
-  if (status === 'confirmed') return 'confirmed';
-  if (status === 'cancelled') return 'cancelled';
+  if (status === 'confirmed') return 'status-badge status-badge--confirmed';
+  if (status === 'cancelled') return 'status-badge status-badge--cancelled';
+  if (status === 'completed') return 'status-badge status-badge--completed';
   return '';
 }
 
@@ -67,7 +68,10 @@ export async function renderProfilePage(container, navigate) {
 
     const user = profileRes.user;
     const stats = statsRes.stats;
-    let activeTab = 'bookings';
+
+    // Parse tab from query param (e.g. ?tab=balance)
+    const params = new URLSearchParams(window.location.search);
+    let activeTab = params.get('tab') || 'bookings';
 
     function renderLayout() {
       const initial = (user.name || user.email)[0].toUpperCase();
@@ -125,6 +129,9 @@ export async function renderProfilePage(container, navigate) {
       container.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
           activeTab = tab.dataset.tab;
+          const url = new URL(window.location);
+          url.searchParams.set('tab', activeTab);
+          window.history.replaceState({}, '', url.toString());
           renderLayout();
         });
       });

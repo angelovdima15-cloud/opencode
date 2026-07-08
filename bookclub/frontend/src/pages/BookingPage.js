@@ -6,13 +6,27 @@ export async function renderBookingPage(container, navigate, bookingId) {
 
   try {
     const booking = await api.getBooking(bookingId);
+    const isConfirmed = booking.status === 'confirmed';
 
     container.innerHTML = `
       <div class="booking-page">
-        <div class="booking-status ${booking.status}">
-          ${booking.status === 'confirmed' ? '✅' : '❌'}
-          <h2>${booking.status === 'confirmed' ? 'Бронь подтверждена! Приходи в клуб к указанному времени.' : 'Бронь отменена'}</h2>
+        <div class="booking-status">
+          <div class="confirmation-check">
+            <span class="confirmation-check__icon">${isConfirmed ? '✓' : '✗'}</span>
+          </div>
+          <h2>${isConfirmed ? 'Бронь подтверждена!' : 'Бронь отменена'}</h2>
+          <p style="color:var(--text-muted);font-size:14px;margin-top:4px">
+            ${isConfirmed ? 'Приходи в клуб к указанному времени. Мы отправили уведомление в Telegram.' : ''}
+          </p>
         </div>
+
+        ${isConfirmed ? `
+          <div class="qr-block">
+            <span class="qr-block__label">Код для входа</span>
+            <span class="qr-block__code">${bookingId.toString().padStart(6, '0')}</span>
+            <span class="qr-block__label" style="font-size:11px">Покажи этот код на ресепшене</span>
+          </div>
+        ` : ''}
 
         <div class="booking-details">
           <div class="detail-row">
@@ -43,7 +57,10 @@ export async function renderBookingPage(container, navigate, bookingId) {
 
         <div class="booking-actions">
           <button class="btn btn-primary" onclick="location.href='/'">На главную</button>
-          ${booking.status !== 'cancelled' ? `<button class="btn btn-danger" data-cancel="${booking.booking_id}">Отменить бронь</button>` : ''}
+          ${booking.status !== 'cancelled' ? `
+            <button class="btn btn-outline" style="flex:1;text-align:center" onclick="window.open('https://2gis.kz/...', '_blank')">🗺️ Проложить маршрут</button>
+            <button class="btn btn-danger" data-cancel="${booking.booking_id}">Отменить</button>
+          ` : ''}
         </div>
       </div>
     `;

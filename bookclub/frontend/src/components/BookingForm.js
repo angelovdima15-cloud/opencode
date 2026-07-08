@@ -67,11 +67,11 @@ export class BookingForm {
           </div>
 
           <div class="booking-form__summary">
-            <span id="booking-duration-text">2 часа</span>
-            <span id="booking-price-text">${this.pricePerHour * 2} ₸</span>
+            <span id="booking-duration-text" style="color:var(--text-muted)">2 часа</span>
+            <span id="booking-price-text" style="color:var(--accent);font-weight:800;font-size:20px">${this.pricePerHour * 2} ₸</span>
           </div>
 
-          <button type="submit" class="btn btn-primary btn-block">
+          <button type="submit" class="btn btn-primary btn-block" style="background:var(--accent);border-radius:12px;padding:14px;font-size:16px">
             💳 Оплатить и забронировать
           </button>
         </form>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bookclub-v1';
+const CACHE_NAME = 'cofou-v1';
 const urlsToCache = ['/', '/index.html', '/src/styles/main.css', '/src/styles/map.css'];
 
 self.addEventListener('install', (event) => {

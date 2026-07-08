@@ -35,8 +35,8 @@ export async function renderHomePage(container, navigate) {
       <div class="hero__bg"></div>
       <div class="hero__content">
         <div class="hero__emoji">🎮</div>
-        <h1 class="hero__title">BookClub</h1>
-        <p class="hero__subtitle">Бронируй ПК в клубах Караганды онлайн</p>
+        <h1 class="hero__title">cofou</h1>
+        <p class="hero__subtitle">Найди место. Забронируй время. Приходи и играй.</p>
         <p class="hero__desc">Без звонков, без очередей, по-настоящему</p>
 
         ${isLogged && stats ? `
@@ -122,7 +122,7 @@ export async function renderHomePage(container, navigate) {
     </section>
 
     <section class="section features">
-      <h2 class="section__title">Почему BookClub</h2>
+      <h2 class="section__title">Почему cofou</h2>
       <div class="features__grid">
         <div class="feature-card">
           <div class="feature-card__icon">✅</div>
@@ -166,7 +166,7 @@ export async function renderHomePage(container, navigate) {
     </section>
 
     <footer class="footer">
-      <p>🎮 BookClub — бронирование ПК клубов в Караганде</p>
+      <p>🎮 cofou — бронирование ПК клубов</p>
       <p class="footer__small">© ${new Date().getFullYear()} — Работает полностью онлайн</p>
     </footer>
   `;
